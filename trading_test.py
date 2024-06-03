@@ -102,8 +102,8 @@ class TradingTest:
             moex_usdrub_tod = row['<CLOSE>_y']
 
             # почему-то если торговать при закрытой MOEX, то прибиль получается больше
-            result = self.trader.process_tick(exmo_bid, exmo_ask, moex_usdrub_tod, True)
-            # result = self.trader.process_tick(exmo_bid, exmo_ask, moex_usdrub_tod, row['moex_open'])
+            # result = self.trader.process_tick(exmo_bid, exmo_ask, moex_usdrub_tod, True)
+            result = self.trader.process_tick(exmo_bid, exmo_ask, moex_usdrub_tod, row['moex_open'])
             if result is None:
                 continue
             
@@ -134,17 +134,8 @@ class TradingTest:
 
         QtWidgets.QApplication.exec_()
 
-hyperparameters = {
-    'window_size': 40,
-    'ignore_last': 1,
-    'ema_alfa1': 0.1,
-    'ema_alfa2': 0.1,
-    'ema_diff_buy': 0.9,
-    'take_profit': 0.3,
-    'trade_amount': 1
-}
-
+hyperparameters = {'ema_alfa1': 0.01159251743468586, 'ema_alfa2': 0.10097178464732215, 'ema_diff_buy': 1.2107207871599752, 'ignore_last': 5, 'take_profit': 0.4580822231406898, 'trade_amount': 4.9077700913771585, 'window_size': 91}
 trader = Trader(balance_rub=1000, balance_usdt=0, hyperparameters=hyperparameters)
 test = TradingTest(trader, 'exmo_USDT_RUB_2024.csv', 'mmvb_USDRUB_TOD_2024.csv')
-test.load_data('22.03.2024')
+test.load_data('11.01.2024')
 test.run_backtest()

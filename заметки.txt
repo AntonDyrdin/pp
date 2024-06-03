@@ -10,3 +10,7 @@ a["2"][0][4]
 
 в методе run_backtest, начиная с "if self.trader.tick_count > self.trader.window_size + self.trader.ignore_last:", ты копируешь код класса Trader. Так делать нельзя. Давай информацию о сделках возвращать в методе process_tick.
 Во-вторых, отрисовку графиков надо вести одновременно с торговлей, то есть внутри run_backtest в главном его цикле, чтобы наблюдать за этим процессом в реальном времени. 
+
+{'ema_alfa1': 0.03623883314774354, 'ema_alfa2': 0.1530066712748167, 'ema_diff_buy': 0.515228356101787, 'ignore_last': 0, 'take_profit': 0.4845125219074498, 'trade_amount': 4.396037144747167, 'window_size': 88}
+{'ema_alfa1': 0.01159251743468586, 'ema_alfa2': 0.10097178464732215, 'ema_diff_buy': 1.2107207871599752, 'ignore_last': 5, 'take_profit': 0.4580822231406898, 'trade_amount': 4.9077700913771585, 'window_size': 91}
+{'ema_alfa1': 0.24151371906445965, 'ema_alfa2': 0.2503317254616477, 'ema_diff_buy': 0.25795051038052685, 'ignore_last': 10, 'take_profit': 0.4494505453417919, 'trade_amount': 4.986385800586354, 'window_size': 48}

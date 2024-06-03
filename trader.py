@@ -40,8 +40,8 @@ class Trader:
             return None
         
 
-        ema_exmo_bid = self.calculate_ema(self.exmo_bid_window[:-self.ignore_last], self.ema_alfa1)
-        ema_moex_usdrub = self.calculate_ema(self.moex_usdrub_tod_window[:-self.ignore_last], self.ema_alfa2)
+        ema_exmo_bid = self.calculate_ema(self.exmo_bid_window[:-self.ignore_last] if self.ignore_last > 0 else self.exmo_bid_window, self.ema_alfa1)
+        ema_moex_usdrub = self.calculate_ema(self.moex_usdrub_tod_window[:-self.ignore_last] if self.ignore_last > 0 else self.moex_usdrub_tod_window, self.ema_alfa2)
         ema_diff = ema_moex_usdrub - ema_exmo_bid
         indicator = moex_usdrub_tod - exmo_bid - ema_diff
 
