@@ -27,7 +27,7 @@ class TradingTest:
         self.moex_data = pd.read_csv(self.moex_file, delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
         self.moex_data['datetime'] = pd.to_datetime(self.moex_data['<DATE>'] + ' ' + self.moex_data['<TIME>'], format='%d%m%y %H%M%S')
         self.moex_data.set_index('datetime', inplace=True)
-        
+
         # Удаление дубликатов по индексу
         self.moex_data = self.moex_data[~self.moex_data.index.duplicated(keep='first')]
         # Клонирование DataFrame до ресемплинга
@@ -46,7 +46,16 @@ class TradingTest:
 
         # Объединение данных с использованием merge_asof
         self.data = pd.merge_asof(self.exmo_data, self.moex_data, on='datetime', direction='forward')
-        self.data.to_csv('moex_data_filled.csv', sep=';')
+
+        # Чтение файла с данными по BTC
+        btc_data = pd.read_csv('exmo_BTC_USDT_2024.csv', delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
+        btc_data['datetime'] = pd.to_datetime(btc_data['<DATE>'] + ' ' + btc_data['<TIME>'], format='%d%m%y %H%M%S')
+        btc_data.set_index('datetime', inplace=True)
+        
+        # Объединение данных по BTC с текущими данными
+        self.data = pd.merge_asof(self.data, btc_data, on='datetime', direction='forward')
+        self.data.rename(columns={'<CLOSE>': '<CLOSE>_btc'}, inplace=True)
+        print('Input data:', self.data)
         
     def run_backtest(self):
         app = QtWidgets.QApplication([])
@@ -64,20 +73,27 @@ class TradingTest:
         axis4 = pg.graphicsItems.DateAxisItem.DateAxisItem(orientation='bottom')
 
         # Создание графиков
-        # indicator_plot = win.addPlot(title="Indicator", axisItems={'bottom': axis1})
-        # win.nextRow()
+        indicator_plot = win.addPlot(title="Indicator", axisItems={'bottom': axis2})
+        indicator_plot.showGrid(True, True)
+        win.nextRow()
         # plot1 = win.addPlot(title="EMA Diff", axisItems={'bottom': axis2})
         # win.nextRow()
         plot2 = win.addPlot(title="Profit", axisItems={'bottom': axis3})
+        plot2.showGrid(True, True)
         win.nextRow()
         plot3 = win.addPlot(title="Prices", axisItems={'bottom': axis4})
+        plot3.showGrid(True, True)
+        win.nextRow()
+        plot4 = win.addPlot(title="BTC/USDT", axisItems={'bottom': axis1})
+        plot4.showGrid(True, True)
         
         # Связка осей для синхронной прокрутки
-        # indicator_plot.setXLink(plot3)
-        plot2.setXLink(plot3)
+        indicator_plot.setXLink(plot3)
         # plot1.setXLink(plot3)
+        plot2.setXLink(plot3)
+        plot4.setXLink(plot3)
 
-        # indicator_curve = indicator_plot.plot(pen='cyan')
+        indicator_curve = indicator_plot.plot(pen='cyan')
         # ema_diff_curve = plot1.plot(pen='y')
         profit_curve = plot2.plot(pen='g')
         exmo_bid_curve = plot3.plot(pen='r')
@@ -85,6 +101,7 @@ class TradingTest:
         moex_usdrub_tod_curve = plot3.plot(pen='g')
         buy_scatter = pg.ScatterPlotItem(symbol='o', size=10, pen=pg.mkPen(None), brush=pg.mkBrush(0, 255, 0, 255))
         sell_scatter = pg.ScatterPlotItem(symbol='x', size=10, pen=pg.mkPen(None), brush=pg.mkBrush(255, 50, 50, 255))
+        btc_curve = plot4.plot(pen='cyan')
 
         plot3.addItem(buy_scatter)
         plot3.addItem(sell_scatter)
@@ -94,16 +111,16 @@ class TradingTest:
         exmo_bid_series = []
         exmo_ask_series = []
         moex_series = []
+        btc_series = []
 
         for idx, row in self.data.iterrows():
             timestamp = row['datetime'].timestamp()  # Преобразование индекса в timestamp
             exmo_bid = row['<CLOSE>_x']
             exmo_ask = row['<CLOSE>_x'] + 0.60
             moex_usdrub_tod = row['<CLOSE>_y']
+            btc = row['<CLOSE>_btc']
 
-            # почему-то если торговать при закрытой MOEX, то прибиль получается больше
-            # result = self.trader.process_tick(exmo_bid, exmo_ask, moex_usdrub_tod, True)
-            result = self.trader.process_tick(exmo_bid, exmo_ask, moex_usdrub_tod, row['moex_open'])
+            result = self.trader.process_tick(exmo_bid, exmo_ask, moex_usdrub_tod, row['moex_open'], timestamp)
             if result is None:
                 continue
             
@@ -114,6 +131,7 @@ class TradingTest:
             exmo_bid_series.append((timestamp, exmo_bid))
             exmo_ask_series.append((timestamp, exmo_ask))
             moex_series.append((timestamp, moex_usdrub_tod))
+            btc_series.append((timestamp, btc))
 
             for trade_type, price in trades:
                 if trade_type == 'buy':
@@ -122,11 +140,12 @@ class TradingTest:
                     self.trades.append((timestamp, 'sell', price))
 
         # ema_diff_curve.setData([x for x, y in self.ema_diffs], [y for x, y in self.ema_diffs])
-        # indicator_curve.setData([x for x, y in indicator_series], [y for x, y in indicator_series])
+        indicator_curve.setData([x for x, y in indicator_series], [y for x, y in indicator_series])
         profit_curve.setData([x for x, y in profit_series], [y for x, y in profit_series])
         exmo_bid_curve.setData([x for x, y in exmo_bid_series], [y for x, y in exmo_bid_series])
         exmo_ask_curve.setData([x for x, y in exmo_ask_series], [y for x, y in exmo_ask_series])
         moex_usdrub_tod_curve.setData([x for x, y in moex_series], [y for x, y in moex_series])
+        btc_curve.setData([x for x, y in btc_series], [y for x, y in btc_series])
         
         buy_scatter.setData([x for x, trade_type, y in self.trades if trade_type == 'buy'], [y for x, trade_type, y in self.trades if trade_type == 'buy'])
         sell_scatter.setData([x for x, trade_type, y in self.trades if trade_type == 'sell'], [y for x, trade_type, y in self.trades if trade_type == 'sell'])
@@ -134,8 +153,9 @@ class TradingTest:
 
         QtWidgets.QApplication.exec_()
 
-hyperparameters = {'ema_alfa1': 0.01159251743468586, 'ema_alfa2': 0.10097178464732215, 'ema_diff_buy': 1.2107207871599752, 'ignore_last': 5, 'take_profit': 0.4580822231406898, 'trade_amount': 4.9077700913771585, 'window_size': 91}
-trader = Trader(balance_rub=1000, balance_usdt=0, hyperparameters=hyperparameters)
+hyperparameters = {'window_size': 323, 'ema_alfa1': 0.01903373699962808, 'ema_alfa2': 0.3737415716707692, 'indicator_buy_edge': 0.9671520166825177, 'take_profit': 0.2594676630862253, 'trade_amount': 1, 'open_positions_delay': 9.0}
+
+trader = Trader(balance_rub=300, buy_limit=1000, balance_usdt=0, hyperparameters=hyperparameters)
 test = TradingTest(trader, 'exmo_USDT_RUB_2024.csv', 'mmvb_USDRUB_TOD_2024.csv')
-test.load_data('11.01.2024')
+test.load_data('01.01.2024')
 test.run_backtest()

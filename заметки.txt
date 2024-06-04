@@ -11,6 +11,12 @@ a["2"][0][4]
 в методе run_backtest, начиная с "if self.trader.tick_count > self.trader.window_size + self.trader.ignore_last:", ты копируешь код класса Trader. Так делать нельзя. Давай информацию о сделках возвращать в методе process_tick.
 Во-вторых, отрисовку графиков надо вести одновременно с торговлей, то есть внутри run_backtest в главном его цикле, чтобы наблюдать за этим процессом в реальном времени. 
 
-{'ema_alfa1': 0.03623883314774354, 'ema_alfa2': 0.1530066712748167, 'ema_diff_buy': 0.515228356101787, 'ignore_last': 0, 'take_profit': 0.4845125219074498, 'trade_amount': 4.396037144747167, 'window_size': 88}
-{'ema_alfa1': 0.01159251743468586, 'ema_alfa2': 0.10097178464732215, 'ema_diff_buy': 1.2107207871599752, 'ignore_last': 5, 'take_profit': 0.4580822231406898, 'trade_amount': 4.9077700913771585, 'window_size': 91}
-{'ema_alfa1': 0.24151371906445965, 'ema_alfa2': 0.2503317254616477, 'ema_diff_buy': 0.25795051038052685, 'ignore_last': 10, 'take_profit': 0.4494505453417919, 'trade_amount': 4.986385800586354, 'window_size': 48}
+{'ema_alfa1': 0.03623883314774354, 'ema_alfa2': 0.1530066712748167, 'indicator_buy_edge': 0.515228356101787, 'ignore_last': 0, 'take_profit': 0.4845125219074498, 'trade_amount': 4.396037144747167, 'window_size': 88}
+{'ema_alfa1': 0.01159251743468586, 'ema_alfa2': 0.10097178464732215, 'indicator_buy_edge': 1.2107207871599752, 'ignore_last': 5, 'take_profit': 0.4580822231406898, 'trade_amount': 4.9077700913771585, 'window_size': 91}
+{'ema_alfa1': 0.24151371906445965, 'ema_alfa2': 0.2503317254616477, 'indicator_buy_edge': 0.25795051038052685, 'ignore_last': 10, 'take_profit': 0.4494505453417919, 'trade_amount': 4.986385800586354, 'window_size': 48}
+{'ema_alfa1': 0.1369944473036128, 'ema_alfa2': 0.16743041126356456, 'indicator_buy_edge': 0.5809537593892111, 'ignore_last': 14, 'take_profit': 0.259959483198446, 'window_size': 67,
+'trade_amount': 4
+}
+{'ema_alfa1': 0.001066599248986642, 'ema_alfa2': 0.2985127144449566, 'ignore_last': 1.0, 'indicator_buy_edge': 0.3025513614055195, 'take_profit': 0.010283196715403287, 'trade_amount': 2.3774972897072013, 'window_size': 49.0}
+{'window_size': 323, 'ignore_last': 0, 'ema_alfa1': 0.01903373699962808, 'ema_alfa2': 0.3737415716707692, 'indicator_buy_edge': 0.9671520166825177, 'take_profit': 0.2594676630862253, 'trade_amount': 2, 
+'open_positions_delay': 9.0}
