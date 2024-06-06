@@ -15,6 +15,7 @@ class Trader:
         self.tick_counter = 0
         self.positions = []  # Список для хранения позиций { price: float, time: timestamp}
         self.buy_limit = buy_limit
+        self.ema_diff = None
 
     def get_profit(self, bid_usdtrub):
         return self.balance_rub + (self.balance_usdt * bid_usdtrub)
@@ -25,7 +26,7 @@ class Trader:
             ema.append(ema[-1] + alpha * (price - ema[-1]))
         return ema[-1]
 
-    def process_tick(self, exmo_bid, exmo_ask, moex_usdrub_tod, moex_open, current_time):
+    def minute_ticker(self, exmo_bid, exmo_ask, moex_usdrub_tod, moex_open, current_time):
         self.exmo_bid_window.append(exmo_bid)
         self.moex_usdrub_tod_window.append(moex_usdrub_tod)
         self.tick_counter += 1
@@ -40,11 +41,14 @@ class Trader:
         if self.tick_counter <= self.window_size:
             return None
 
-
         ema_exmo_bid = self.calculate_ema(self.exmo_bid_window, self.ema_alfa1)
         ema_moex_usdrub = self.calculate_ema(self.moex_usdrub_tod_window, self.ema_alfa2)
-        ema_diff = ema_moex_usdrub - ema_exmo_bid
-        indicator = moex_usdrub_tod - exmo_bid - ema_diff
+        self.ema_diff = ema_moex_usdrub - ema_exmo_bid
+
+    def process_tick(self, exmo_bid, exmo_ask, moex_usdrub_tod, moex_open, current_time):
+        if self.ema_diff is None:
+          return [], 0
+        indicator = moex_usdrub_tod - exmo_bid - self.ema_diff
 
         # Логика торговли
         trades = []
@@ -79,4 +83,4 @@ class Trader:
         for position in positions_to_remove:
             self.positions.remove(position)
 
-        return trades, ema_diff, indicator
+        return trades, indicator

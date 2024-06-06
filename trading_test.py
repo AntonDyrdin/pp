@@ -48,13 +48,13 @@ class TradingTest:
         self.data = pd.merge_asof(self.exmo_data, self.moex_data, on='datetime', direction='forward')
 
         # Чтение файла с данными по BTC
-        btc_data = pd.read_csv('exmo_BTC_USDT_2024.csv', delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
-        btc_data['datetime'] = pd.to_datetime(btc_data['<DATE>'] + ' ' + btc_data['<TIME>'], format='%d%m%y %H%M%S')
-        btc_data.set_index('datetime', inplace=True)
+        # btc_data = pd.read_csv('exmo_BTC_USDT_2024.csv', delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
+        # btc_data['datetime'] = pd.to_datetime(btc_data['<DATE>'] + ' ' + btc_data['<TIME>'], format='%d%m%y %H%M%S')
+        # btc_data.set_index('datetime', inplace=True)
         
         # Объединение данных по BTC с текущими данными
-        self.data = pd.merge_asof(self.data, btc_data, on='datetime', direction='forward')
-        self.data.rename(columns={'<CLOSE>': '<CLOSE>_btc'}, inplace=True)
+        # self.data = pd.merge_asof(self.data, btc_data, on='datetime', direction='forward')
+        # self.data.rename(columns={'<CLOSE>': '<CLOSE>_btc'}, inplace=True)
         print('Input data:', self.data)
         
     def run_backtest(self):
@@ -83,15 +83,15 @@ class TradingTest:
         win.nextRow()
         plot3 = win.addPlot(title="Prices", axisItems={'bottom': axis4})
         plot3.showGrid(True, True)
-        win.nextRow()
-        plot4 = win.addPlot(title="BTC/USDT", axisItems={'bottom': axis1})
-        plot4.showGrid(True, True)
+        # win.nextRow()
+        # plot4 = win.addPlot(title="BTC/USDT", axisItems={'bottom': axis1})
+        # plot4.showGrid(True, True)
         
         # Связка осей для синхронной прокрутки
         indicator_plot.setXLink(plot3)
         # plot1.setXLink(plot3)
         plot2.setXLink(plot3)
-        plot4.setXLink(plot3)
+        # plot4.setXLink(plot3)
 
         indicator_curve = indicator_plot.plot(pen='cyan')
         # ema_diff_curve = plot1.plot(pen='y')
@@ -101,7 +101,7 @@ class TradingTest:
         moex_usdrub_tod_curve = plot3.plot(pen='g')
         buy_scatter = pg.ScatterPlotItem(symbol='o', size=10, pen=pg.mkPen(None), brush=pg.mkBrush(0, 255, 0, 255))
         sell_scatter = pg.ScatterPlotItem(symbol='x', size=10, pen=pg.mkPen(None), brush=pg.mkBrush(255, 50, 50, 255))
-        btc_curve = plot4.plot(pen='cyan')
+        # btc_curve = plot4.plot(pen='cyan')
 
         plot3.addItem(buy_scatter)
         plot3.addItem(sell_scatter)
@@ -111,27 +111,28 @@ class TradingTest:
         exmo_bid_series = []
         exmo_ask_series = []
         moex_series = []
-        btc_series = []
+        # btc_series = []
 
         for idx, row in self.data.iterrows():
             timestamp = row['datetime'].timestamp()  # Преобразование индекса в timestamp
             exmo_bid = row['<CLOSE>_x']
-            exmo_ask = row['<CLOSE>_x'] + 0.60
+            exmo_ask = row['<CLOSE>_x'] + 0.5
             moex_usdrub_tod = row['<CLOSE>_y']
-            btc = row['<CLOSE>_btc']
+            # btc = row['<CLOSE>_btc']
 
+            self.trader.minute_ticker(exmo_bid, exmo_ask, moex_usdrub_tod, row['moex_open'], timestamp)
             result = self.trader.process_tick(exmo_bid, exmo_ask, moex_usdrub_tod, row['moex_open'], timestamp)
             if result is None:
                 continue
             
-            trades, ema_diff, indicator = result
-            self.ema_diffs.append((timestamp, ema_diff))
+            trades, indicator = result
+            self.ema_diffs.append((timestamp, self.trader.ema_diff))
             profit_series.append((timestamp, self.trader.get_profit(exmo_bid)))
             indicator_series.append((timestamp, indicator))
             exmo_bid_series.append((timestamp, exmo_bid))
             exmo_ask_series.append((timestamp, exmo_ask))
             moex_series.append((timestamp, moex_usdrub_tod))
-            btc_series.append((timestamp, btc))
+            # btc_series.append((timestamp, btc))
 
             for trade_type, price in trades:
                 if trade_type == 'buy':
@@ -145,7 +146,7 @@ class TradingTest:
         exmo_bid_curve.setData([x for x, y in exmo_bid_series], [y for x, y in exmo_bid_series])
         exmo_ask_curve.setData([x for x, y in exmo_ask_series], [y for x, y in exmo_ask_series])
         moex_usdrub_tod_curve.setData([x for x, y in moex_series], [y for x, y in moex_series])
-        btc_curve.setData([x for x, y in btc_series], [y for x, y in btc_series])
+        # btc_curve.setData([x for x, y in btc_series], [y for x, y in btc_series])
         
         buy_scatter.setData([x for x, trade_type, y in self.trades if trade_type == 'buy'], [y for x, trade_type, y in self.trades if trade_type == 'buy'])
         sell_scatter.setData([x for x, trade_type, y in self.trades if trade_type == 'sell'], [y for x, trade_type, y in self.trades if trade_type == 'sell'])
@@ -157,5 +158,5 @@ hyperparameters = {'window_size': 323, 'ema_alfa1': 0.01903373699962808, 'ema_al
 
 trader = Trader(balance_rub=300, buy_limit=1000, balance_usdt=0, hyperparameters=hyperparameters)
 test = TradingTest(trader, 'exmo_USDT_RUB_2024.csv', 'mmvb_USDRUB_TOD_2024.csv')
-test.load_data('01.01.2024')
+test.load_data('01.01.2023')
 test.run_backtest()

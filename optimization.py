@@ -42,6 +42,7 @@ class TradingTest:
             exmo_ask = row['<CLOSE>_x'] + 0.60
             moex_usdrub_tod = row['<CLOSE>_y']
 
+            self.trader.minute_ticker(exmo_bid, exmo_ask, moex_usdrub_tod, row['moex_open'], timestamp)
             result = self.trader.process_tick(exmo_bid, exmo_ask, moex_usdrub_tod, row['moex_open'], timestamp)
             if result is None:
                 continue

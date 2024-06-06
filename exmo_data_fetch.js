@@ -3,16 +3,16 @@ const fs = require('fs');
 const { DateTime } = require('luxon');
 const moment = require('moment');
 
-const symbol = 'BTC_USDT';
+const symbol = 'USDT_RUB';
 const resolution = 1; // 1 minute
-const year = 2024;
+const year = 2023;
 
 // Start and end timestamps for April 2024 in Unix time
-const startTime = DateTime.fromObject({ year, month: 1, day: 1, hour: 0, minute: 0, second: 0 }).toSeconds();
-const endTime = DateTime.fromObject({ year, month: 5, day: 24, hour: 23, minute: 59, second: 59 }).toSeconds();
+const startTime = DateTime.fromObject({ year, month: 7, day: 8, hour: 17, minute: 0, second: 0 }).toSeconds();
+const endTime = DateTime.fromObject({ year, month: 12, day: 31, hour: 23, minute: 59, second: 0 }).toSeconds();
 
 const baseUrl = 'https://api.exmo.com/v1.1/candles_history';
-const outputFile = 'exmo_BTC_USDT_2024.csv';
+const outputFile = 'exmo_USDT_RUB-2023-2.csv';
 
 async function fetchData() {
     let currentTime = startTime;
@@ -20,9 +20,13 @@ async function fetchData() {
 
     while (currentTime < endTime) {
         const toTime = Math.min(currentTime + 60 * 60, endTime); // Fetch data in hourly chunks
-
+        await new Promise((resolve)=>{
+            setTimeout(resolve, 1500);
+        });
+        console.log(new Date(currentTime*1000))
         try {
             const response = await axios.get(baseUrl, {
+              timeout: 600000,
                 params: {
                     symbol,
                     resolution,
@@ -46,7 +50,7 @@ async function fetchData() {
 }
 
 function saveToCSV(data) {
-    const header = '<DATE>;<TIME>;<OPEN>;<HIGH>;<LOW>;<CLOSE>;<VOL>\n';
+//     const header = '<DATE>;<TIME>;<OPEN>;<HIGH>;<LOW>;<CLOSE>;<VOL>\n';
     const rows = data.map(candle => [
         moment(candle.t).utc().format('DDMMYY;HHmmss'),
         candle.o,
@@ -56,7 +60,7 @@ function saveToCSV(data) {
         candle.v
     ].join(';')).join('\n');
 
-    fs.writeFileSync(outputFile, header + rows);
+    fs.writeFileSync(outputFile, rows);
     console.log(`Data saved to ${outputFile}`);
 }
 
