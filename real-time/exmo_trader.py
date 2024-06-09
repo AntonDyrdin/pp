@@ -1,26 +1,16 @@
-import os
-import hmac
-import hashlib
 import time
 import json
-import requests
 import websocket
 import threading
-import signal
+import requests
 import logging
-
-logging.basicConfig(level=logging.INFO)
-
-def read_config(file_path):
-    with open(file_path, 'r') as file:
-        config = json.load(file)
-    return config
+from utils import api_query, calculate_ema
+from data_handler import save_tick_to_csv
+from config import get_api_credentials
 
 class ExmoTrader:
     def __init__(self, config_path, balance_rub, buy_limit, balance_usdt, hyperparameters):
-        config = read_config(config_path)
-        self.api_key = os.getenv('EXMO_API_KEY', config['api_key'])
-        self.api_secret = os.getenv('EXMO_API_SECRET', config['api_secret'])
+        self.api_key, self.api_secret = get_api_credentials(config_path)
         self.balance_rub = balance_rub
         self.balance_usdt = balance_usdt
         self.hyperparameters = hyperparameters
@@ -38,12 +28,20 @@ class ExmoTrader:
         self.buy_limit = buy_limit
         self.ws = None
         self.rest_base_url = "https://api.exmo.me/v1.1"
-        self.setup_websocket()
         self.last_exmo_bid = None
         self.last_exmo_ask = None
         self.last_moex_open = None
         self.last_moex_usdrub_tod = None
         self.ema_diff = None
+        self.profit_series = []
+        self.indicator_series = []
+        self.exmo_bid_series = []
+        self.exmo_ask_series = []
+        self.moex_series = []
+        self.ema_diff_series = []
+        self.trades = []
+
+        self.setup_websocket()
 
     def get_moex_usdrub_tod(self):
         url = "https://iss.moex.com/iss/engines/currency/markets/selt/boards/CETS/securities/USD000000TOD.json"
@@ -70,33 +68,8 @@ class ExmoTrader:
         except (IndexError, KeyError) as e:
             logging.error(f"Ошибка при извлечении данных ММВБ: {e}")
 
-    def get_signature(self, data):
-        return hmac.new(
-            self.api_secret.encode('utf-8'),
-            data.encode('utf-8'),
-            hashlib.sha512
-        ).hexdigest()
-
-    def api_query(self, api_method, params={}):
-        params['nonce'] = int(round(time.time() * 1000))
-        params = json.dumps(params)
-
-        headers = {
-            'Content-Type': 'application/json',
-            'Key': self.api_key,
-            'Sign': self.get_signature(params)
-        }
-
-        try:
-            response = requests.post(self.rest_base_url + api_method, headers=headers, data=params)
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as e:
-            logging.error(f"Ошибка при запросе к API Exmo: {e}")
-            return {}
-
     def execute_trade(self, trade_type, amount, price):
-        order = self.api_query('/order_create', {
+        order = api_query(self.api_key, self.api_secret, self.rest_base_url, '/order_create', {
             'pair': 'USDT_RUB',
             'quantity': amount,
             'price': price,
@@ -105,14 +78,8 @@ class ExmoTrader:
         return order.get('order_id')
 
     def check_order_status(self, order_id):
-        order_info = self.api_query('/order_trades', {'order_id': order_id})
+        order_info = api_query(self.api_key, self.api_secret, self.rest_base_url, '/order_trades', {'order_id': order_id})
         return order_info.get('result') == 'true'
-
-    def calculate_ema(self, prices, alpha=0.1):
-        ema = [prices[0]]  # начальное значение EMA равно первому значению цены
-        for price in prices[1:]:
-            ema.append(ema[-1] + alpha * (price - ema[-1]))
-        return ema[-1]
 
     def get_profit(self, bid_usdtrub):
         return self.balance_rub + (self.balance_usdt * bid_usdtrub)
@@ -130,6 +97,7 @@ class ExmoTrader:
                     trades, indicator = self.process_tick(exmo_bid, exmo_ask, current_time)
                     if trades:
                         logging.info(f"Совершены сделки: {trades}")
+                    save_tick_to_csv('ticks.csv', [current_time, exmo_bid, exmo_ask])
             else:
                 logging.info(message)
         except json.JSONDecodeError as e:
@@ -161,18 +129,27 @@ class ExmoTrader:
         )
         self.ws.on_open = self.on_open
         ws_thread = threading.Thread(target=self.ws.run_forever)
+        ws_thread.daemon = True
         ws_thread.start()
 
     def process_tick(self, exmo_bid, exmo_ask, current_time):
         self.last_exmo_ask = exmo_ask
         self.last_exmo_bid = exmo_bid
+
+        self.exmo_bid_series.append((current_time, exmo_bid))
+        self.exmo_ask_series.append((current_time, exmo_ask))
+
         if self.ema_diff is None:
             return [], 0
 
         indicator = self.last_moex_usdrub_tod - exmo_bid - self.ema_diff
 
+        self.ema_diff_series.append((current_time, self.ema_diff))
+        self.profit_series.append((current_time, self.get_profit(exmo_bid)))
+        self.indicator_series.append((current_time, indicator))
+        self.moex_series.append((current_time, self.last_moex_usdrub_tod))
+
         # Логика торговли
-        trades = []
         if indicator > self.indicator_buy_edge:
             amount_multiplier = indicator / self.indicator_buy_edge
             if (sum(map(lambda p: p['price'] * p['amount'], self.positions)) + self.trade_amount * amount_multiplier * exmo_ask) < self.buy_limit:
@@ -181,12 +158,12 @@ class ExmoTrader:
                     self.balance_rub -= self.trade_amount * amount_multiplier * exmo_ask
                     self.balance_usdt += self.trade_amount * amount_multiplier
                     self.positions.append({'price': exmo_ask, 'time': current_time, 'amount': self.trade_amount * amount_multiplier, 'order_id': order_id})
-                    trades.append(('buy', exmo_ask))
+                    self.trades.append(('buy', exmo_ask))
 
                     # Выставление ордера на продажу
                     sell_price = exmo_ask + self.take_profit
                     order_id = self.execute_trade('sell', self.trade_amount * amount_multiplier, sell_price)
-                    trades.append(('sell_order', sell_price, order_id))
+                    self.trades.append(('sell_order', sell_price, order_id))
 
         # Проверка ордеров на продажу
         positions_to_remove = []
@@ -196,7 +173,7 @@ class ExmoTrader:
                 order_id = self.execute_trade('sell', position['amount'], exmo_bid)
                 self.balance_rub += position['amount'] * exmo_bid
                 self.balance_usdt -= position['amount']
-                trades.append(('sell', exmo_bid))
+                self.trades.append(('sell', exmo_bid))
                 positions_to_remove.append(position)
 
         # Удаление реализованных позиций
@@ -223,37 +200,11 @@ class ExmoTrader:
         if self.tick_counter <= self.window_size:
             return None
 
-        ema_exmo_bid = self.calculate_ema(self.exmo_bid_window, self.ema_alfa1)
-        ema_moex_usdrub = self.calculate_ema(self.moex_usdrub_tod_window, self.ema_alfa2)
+        ema_exmo_bid = calculate_ema(self.exmo_bid_window, self.ema_alfa1)
+        ema_moex_usdrub = calculate_ema(self.moex_usdrub_tod_window, self.ema_alfa2)
         self.ema_diff = ema_moex_usdrub - ema_exmo_bid
 
     def minute_ticker_loop(self):
         while True:
             self.minute_ticker()
             time.sleep(60)
-
-# Параметры
-hyperparameters = {
-    'window_size': 323,
-    'ema_alfa1': 0.01903373699962808,
-    'ema_alfa2': 0.3737415716707692,
-    'indicator_buy_edge': 0.9671520166825177,
-    'take_profit': 0.2594676630862253,
-    'trade_amount': 1,
-    'open_positions_delay': 9.0
-}
-
-# Инициализация трейдера
-trader = ExmoTrader('secret.json', balance_rub=300, buy_limit=1000, balance_usdt=0, hyperparameters=hyperparameters)
-
-def signal_handler(sig, frame):
-    logging.info('Stopping WebSocket...')
-    if trader.ws:
-        trader.ws.close()
-    logging.info('Exiting.')
-    exit(0)
-
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
-
-trader.minute_ticker_loop()
