@@ -11,7 +11,7 @@ setup_logging()
 
 # Параметры
 hyperparameters = {
-    'window_size': 323,
+    'window_size': 5,
     'ema_alfa1': 0.01903373699962808,
     'ema_alfa2': 0.3737415716707692,
     'indicator_buy_edge': 0.9671520166825177,
@@ -24,9 +24,9 @@ hyperparameters = {
 trader = ExmoTrader('secret.json', balance_rub=300, buy_limit=1000, balance_usdt=0, hyperparameters=hyperparameters)
 
 # Запуск основного цикла в отдельном потоке
-# import threading
-# ticker_thread = threading.Thread(target=trader.minute_ticker_loop)
-# ticker_thread.start()
+import threading
+ticker_thread = threading.Thread(target=trader.minute_ticker_loop)
+ticker_thread.start()
 
 # Инициализация PyQtGraph
 app = QtWidgets.QApplication([])
@@ -86,9 +86,6 @@ graph_timer = pg.QtCore.QTimer()
 graph_timer.timeout.connect(update_graphs)
 graph_timer.start(1000)
 
-# Запуск приложения
-sys.exit(app.exec_())
-
 def on_close():
     logging.info('Stopping WebSocket...')
     if trader.ws:
@@ -102,10 +99,8 @@ def on_close():
 # Подписка на событие закрытия окна
 win.closeEvent = lambda event: on_close()
 
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, on_close)
+signal.signal(signal.SIGTERM, on_close)
 
-# Таймер для проверки сигналов
-signal_timer = pg.QtCore.QTimer()
-signal_timer.timeout.connect(lambda: None)
-signal_timer.start(100)
+# Запуск приложения
+sys.exit(app.exec_())

@@ -7,6 +7,10 @@ import logging
 from utils import api_query, calculate_ema
 from data_handler import save_tick_to_csv
 from config import get_api_credentials
+import datetime
+from finam import FinamWebSocketClient
+import pandas as pd
+from dateutil import tz
 
 class ExmoTrader:
     def __init__(self, config_path, balance_rub, buy_limit, balance_usdt, hyperparameters):
@@ -41,7 +45,68 @@ class ExmoTrader:
         self.ema_diff_series = []
         self.trades = []
 
+        self.load_initial_data()
         self.setup_websocket()
+
+    def resample_data(self, data, from_time, current_time, timestamp_key, tz_localize):
+        """Resample data to ensure it covers the entire required range."""
+        # Convert data to DataFrame
+        df = pd.DataFrame(data)
+        df['timestamp'] = pd.to_datetime(df[timestamp_key], unit='ms')
+        if tz_localize:
+            df['timestamp'] = df['timestamp'].dt.tz_localize(datetime.timezone.utc)
+
+        df.set_index('timestamp', inplace=True)
+        
+        # Resample data to 1-minute intervals, forward-filling missing values
+        all_times = pd.date_range(
+          start=datetime.datetime.fromtimestamp(from_time + 60, tz=datetime.timezone.utc),
+          end=datetime.datetime.fromtimestamp(current_time, tz=datetime.timezone.utc),
+          freq='1min'
+        )
+        df = df.reindex(all_times, method='ffill')
+        
+        return df
+
+    def load_initial_data(self):
+        current_time = int(datetime.datetime.now().timestamp())
+        from_time = current_time - self.window_size * 60
+
+        exmo_url = f"{self.rest_base_url}/candles_history?symbol=USDT_RUB&resolution=1&from={from_time}&to={current_time}"
+        finam_client = FinamWebSocketClient()
+
+        # Загрузка данных с Exmo
+        exmo_response = requests.get(exmo_url)
+        exmo_response.raise_for_status()
+        exmo_data = exmo_response.json()
+
+        # Загрузка данных с Moex
+        moex_candles = finam_client.await_historical_data()
+        moex_candles.reverse()
+
+        # Приведение данных к общему временному ряду
+        exmo_df = self.resample_data(exmo_data['candles'], from_time, current_time, 't', tz_localize=True)
+        moex_df = self.resample_data(moex_candles, from_time, current_time, 'timestamp', tz_localize=False)
+
+        # Добавление данных в окна
+        self.exmo_bid_window = exmo_df['c'].tolist()
+        self.moex_usdrub_tod_window = moex_df['close'].tolist()
+
+        for idx, row in exmo_df.iterrows():
+            self.exmo_bid_series.append((idx.timestamp(), row['c']))
+        for idx, row in moex_df.iterrows():
+            self.moex_series.append((idx.timestamp(), row['close']))
+
+        print(len(self.exmo_bid_window), len(self.moex_usdrub_tod_window))
+
+        self.calculate_initial_ema()
+
+    def calculate_initial_ema(self):
+        if len(self.exmo_bid_window) == self.window_size and len(self.moex_usdrub_tod_window) == self.window_size:
+            ema_exmo_bid = calculate_ema(self.exmo_bid_window, self.ema_alfa1)
+            ema_moex_usdrub = calculate_ema(self.moex_usdrub_tod_window, self.ema_alfa2)
+            self.ema_diff = ema_moex_usdrub - ema_exmo_bid
+            self.tick_counter = self.window_size
 
     def get_moex_usdrub_tod(self):
         url = "https://iss.moex.com/iss/engines/currency/markets/selt/boards/CETS/securities/USD000000TOD.json"
@@ -55,14 +120,10 @@ class ExmoTrader:
             
             last_price_index = headers.index('LAST')
             last_price = marketdata[0][last_price_index]
-            state_index = headers.index('HIGHBID')
-            current_state = marketdata[0][state_index] is not None
-            
-            # Состояние "normal" означает, что торги ведутся
-            is_open = current_state == 'normal'
+            state_index = headers.index('TRADINGSTATUS')
             
             self.last_moex_usdrub_tod = last_price
-            self.last_moex_open = is_open
+            self.last_moex_open = marketdata[0][state_index] == 'T'
         except requests.RequestException as e:
             logging.error(f"Ошибка при запросе данных ММВБ: {e}")
         except (IndexError, KeyError) as e:
@@ -97,7 +158,7 @@ class ExmoTrader:
                     trades, indicator = self.process_tick(exmo_bid, exmo_ask, current_time)
                     if trades:
                         logging.info(f"Совершены сделки: {trades}")
-                    save_tick_to_csv('ticks.csv', [current_time, exmo_bid, exmo_ask])
+                    save_tick_to_csv('history.csv', [datetime.datetime.utcnow().strftime("%d.%m.%Y %H:%M:%S.%f")[:-3], exmo_bid, exmo_ask])
             else:
                 logging.info(message)
         except json.JSONDecodeError as e:
@@ -106,13 +167,14 @@ class ExmoTrader:
             logging.error(f"Error in on_message: {e}")
 
     def on_error(self, ws, error):
-        logging.error(f"WebSocket Error: {error}")
+        print(error)
+        logging.error(f"EXMO WebSocket Error: {error}")
 
     def on_close(self, ws, close_status_code, close_msg):
-        logging.info(f"WebSocket Closed")
+        logging.info(f"EXMO WebSocket Closed")
 
     def on_open(self, ws):
-        logging.info(f"WebSocket Opened")
+        logging.info(f"EXMO WebSocket Opened")
         subscribe_message = json.dumps({
             "method": "subscribe",
             "topics": ["spot/order_book_snapshots:USDT_RUB"]
@@ -139,15 +201,18 @@ class ExmoTrader:
         self.exmo_bid_series.append((current_time, exmo_bid))
         self.exmo_ask_series.append((current_time, exmo_ask))
 
-        if self.ema_diff is None:
-            return [], 0
-
-        indicator = self.last_moex_usdrub_tod - exmo_bid - self.ema_diff
+        if self.ema_diff is not None:
+            indicator = self.last_moex_usdrub_tod - exmo_bid - self.ema_diff
+        else:
+            indicator = 0
 
         self.ema_diff_series.append((current_time, self.ema_diff))
         self.profit_series.append((current_time, self.get_profit(exmo_bid)))
         self.indicator_series.append((current_time, indicator))
         self.moex_series.append((current_time, self.last_moex_usdrub_tod))
+
+        if self.ema_diff is None:
+            return [], indicator
 
         # Логика торговли
         if indicator > self.indicator_buy_edge:
@@ -180,7 +245,7 @@ class ExmoTrader:
         for position in positions_to_remove:
             self.positions.remove(position)
 
-        return trades, indicator
+        return self.trades, indicator
 
     def minute_ticker(self):
         self.get_moex_usdrub_tod()
@@ -191,13 +256,13 @@ class ExmoTrader:
         self.tick_counter += 1
 
         # Удаление старых значений, если превышено окно
-        if len(self.exmo_bid_window) > self.window_size:
+        if len(self.exmo_bid_window) >= self.window_size:
             self.exmo_bid_window.pop(0)
-        if len(self.moex_usdrub_tod_window) > self.window_size:
+        if len(self.moex_usdrub_tod_window) >= self.window_size:
             self.moex_usdrub_tod_window.pop(0)
 
         # Если накоплено недостаточно данных, просто выходим
-        if self.tick_counter <= self.window_size:
+        if self.tick_counter < self.window_size:
             return None
 
         ema_exmo_bid = calculate_ema(self.exmo_bid_window, self.ema_alfa1)
