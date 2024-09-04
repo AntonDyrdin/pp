@@ -3,16 +3,14 @@ const fs = require('fs');
 const { DateTime } = require('luxon');
 const moment = require('moment');
 
-const symbol = 'USDT_RUB';
+const symbol = 'BTC_USDT';
 const resolution = 1; // 1 minute
-const year = 2023;
 
-// Start and end timestamps for April 2024 in Unix time
-const startTime = DateTime.fromObject({ year, month: 7, day: 8, hour: 17, minute: 0, second: 0 }).toSeconds();
-const endTime = DateTime.fromObject({ year, month: 12, day: 31, hour: 23, minute: 59, second: 0 }).toSeconds();
+const startTime = DateTime.fromObject({ year: 2023, month: 7, day: 1, hour: 0, minute: 0, second: 0 }).toSeconds();
+const endTime = DateTime.fromObject({ year: 2023, month: 7, day: 1, hour: 10, minute: 0, second: 0 }).toSeconds();
 
 const baseUrl = 'https://api.exmo.com/v1.1/candles_history';
-const outputFile = 'exmo_USDT_RUB-2023-2.csv';
+const outputFile = 'exmo_BTC_USDT-3.csv';
 
 async function fetchData() {
     let currentTime = startTime;

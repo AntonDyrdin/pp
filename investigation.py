@@ -3,17 +3,17 @@ import matplotlib.pyplot as plt
 from statsmodels.tsa.seasonal import seasonal_decompose
 
 # Чтение первого CSV файла
-df1 = pd.read_csv('exmo_USDT_RUB_2024.csv', delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
+df1 = pd.read_csv('datasets/exmo_USDT_RUB.csv', delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
 df1['datetime'] = pd.to_datetime(df1['<DATE>'] + ' ' + df1['<TIME>'], format='%d%m%y %H%M%S')
 df1.set_index('datetime', inplace=True)
 
 # Чтение второго CSV файла
-df2 = pd.read_csv('mmvb_USDRUB_TOD_2024.csv', delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
+df2 = pd.read_csv('datasets/mmvb_USDRUB_TOD.csv', delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
 df2['datetime'] = pd.to_datetime(df2['<DATE>'] + ' ' + df2['<TIME>'], format='%d%m%y %H%M%S')
 df2.set_index('datetime', inplace=True)
 
 # Чтение файла c BTC
-df3 = pd.read_csv('exmo_BTC_USDT_2024.csv', delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
+df3 = pd.read_csv('datasets/exmo_BTC_USDT.csv', delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
 df3['datetime'] = pd.to_datetime(df3['<DATE>'] + ' ' + df3['<TIME>'], format='%d%m%y %H%M%S')
 df3.set_index('datetime', inplace=True)
 

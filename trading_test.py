@@ -48,7 +48,7 @@ class TradingTest:
         self.data = pd.merge_asof(self.exmo_data, self.moex_data, on='datetime', direction='forward')
 
         # Чтение файла с данными по BTC
-        # btc_data = pd.read_csv('exmo_BTC_USDT_2024.csv', delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
+        # btc_data = pd.read_csv('exmo_BTC_USDT.csv', delimiter=';', dtype={'<DATE>': str, '<TIME>': str})
         # btc_data['datetime'] = pd.to_datetime(btc_data['<DATE>'] + ' ' + btc_data['<TIME>'], format='%d%m%y %H%M%S')
         # btc_data.set_index('datetime', inplace=True)
         
