@@ -27,6 +27,7 @@ class Agent:
     sell = output[0, 0]
     buy = output[0, 1]
     hold = output[0, 2]
+    print(input, output)
 
     if sell > buy and sell > hold:
       return 'SELL' 

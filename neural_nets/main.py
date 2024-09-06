@@ -1,9 +1,11 @@
 import pandas as pd
-
+import sys
 from genetic import Genetic
 import numpy as np
-from PyQt5 import QtWidgets
+from PyQt5 import QtWidgets, QtCore
 import pyqtgraph as pg
+import asyncio
+import qasync
 
 # подгрузить датасеты
 # features_count = 0
@@ -44,20 +46,21 @@ df3.set_index('datetime', inplace=True)
 df3_close = df3['<CLOSE>'].astype(np.float32)
 
 # Объединение DataFrame и создание массива данных
-merged_df = pd.merge(df1_close, df3_close, left_index=True, right_index=True, how='outer', suffixes=('_file1', '_file3')).fillna(0)
+merged_df = pd.merge(df1_close, df3_close, left_index=True, right_index=True, how='outer', suffixes=('_file1', '_file3')).fillna(method='ffill')
 dataset = merged_df.values
 
 # Создание входного набора с использованием окон
 window_size = 5
 inputs_set = np.lib.stride_tricks.sliding_window_view(dataset, window_shape=(window_size, dataset.shape[1]))
-
-# Преобразование к нужной форме
 inputs_set = inputs_set[:, 0, :, :]
 
 print(inputs_set.shape)
 
 # Инициализация PyQtGraph
 app = QtWidgets.QApplication([])
+loop = qasync.QEventLoop(app)
+asyncio.set_event_loop(loop)
+
 win = pg.GraphicsLayoutWidget(show=True, title="Trading Backtest")
 win.showMaximized()
 win.setWindowTitle('Trading Backtest with PyQtGraph')
@@ -74,14 +77,35 @@ axis4 = pg.graphicsItems.DateAxisItem.DateAxisItem(orientation='bottom')
 indicator_plot = win.addPlot(title="Indicator", axisItems={'bottom': axis2})
 indicator_plot.showGrid(True, True)
 win.nextRow()
-plot2 = win.addPlot(title="Profit", axisItems={'bottom': axis3})
-plot2.showGrid(True, True)
+profit_plot = win.addPlot(title="Profit", axisItems={'bottom': axis3})
+profit_plot.showGrid(True, True)
 win.nextRow()
 
-# инициализировать популяцию
-genetic = Genetic(population_size=2)
-genetic.test_individ(genetic.population[0], inputs_set[700000:,:,:], merged_df[700000:])
-print(genetic.population[0].balance_usdt)
-print(genetic.population[0].balance_rub)
+profit_plot.setXLink(indicator_plot)
 
-# запустить генетический алгоритм
+# Таймер для обновления графиков
+timer = QtCore.QTimer()
+
+curves = {}
+
+curves['profit'] = profit_plot.plot([], [], pen=pg.mkPen('r', width=1))
+curves['ask'] = indicator_plot.plot(pen='r')
+
+# Инициализировать популяцию
+genetic = Genetic(population_size=2)
+
+def update_graphs():
+    curves['profit'].setData(genetic.timestamps_history, genetic.profit_history)
+    curves['ask'].setData(genetic.timestamps_history, genetic.ask_history)
+
+# Привязка таймера к обновлению графиков
+timer.timeout.connect(update_graphs)
+timer.start(100)  # Обновление каждые 100 миллисекунд
+
+async def main():
+    await genetic.run(genetic.population[0], inputs_set[700000:,:,:], merged_df[700000:], curves)
+
+if __name__ == "__main__":
+    with loop:  # Запуск основного event loop-а
+        asyncio.ensure_future(main())  # Запуск асинхронной задачи
+        loop.run_forever()  # Запуск основного цикла приложения
