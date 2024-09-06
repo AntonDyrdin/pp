@@ -7,11 +7,14 @@ class Agent:
     self.id = id
     self.tick_counter = 0
     self.positions = []  # Список для хранения позиций { price: float, time: timestamp}
-    self.buy_limit = 5
+    self.buy_limit = 500
     self.balance_usdt = 0
-    self.balance_rub = 1000
+    self.balance_rub = 0
+    self.start_balance_rub = 1000
     self.trade_amount = 1
     self.trades = []
+    self.profit_history = []
+    self.profit = 0
 
     self.neural_net = Sequential()
     self.neural_net.add(Input((window_size, features_count)))
@@ -20,14 +23,16 @@ class Agent:
     self.neural_net.add(Dense(3))
     
     self.neural_net.compile(optimizer='rmsprop', loss='categorical_crossentropy')
+
+  # Возвращает output[ 1 x 3 ]
+  def run_neural_net(self, input):
+    return self.neural_net.predict(np.expand_dims(input, axis=0))
   
   # Возвращает 'SELL', 'BUY', 'HOLD'
-  def run_neural_net(self, input):
-    output = self.neural_net.predict(np.expand_dims(input, axis=0))
-    sell = output[0, 0]
-    buy = output[0, 1]
-    hold = output[0, 2]
-    print(input, output)
+  def decode_net_output(self, output):
+    sell = output[0]
+    buy = output[1]
+    hold = output[2]
 
     if sell > buy and sell > hold:
       return 'SELL' 
@@ -35,7 +40,11 @@ class Agent:
       return 'BUY' 
     elif hold > buy and hold > sell:
       return 'HOLD' 
-    
+
+  def get_action(self, input):
+    output = self.run_neural_net(input)
+    decode_net_output(output[0])
+
   def process_tick(self, action, bid, ask, current_time):
         # Логика торговли
         if action == 'BUY':

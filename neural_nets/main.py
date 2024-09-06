@@ -92,18 +92,18 @@ curves['profit'] = profit_plot.plot([], [], pen=pg.mkPen('r', width=1))
 curves['ask'] = indicator_plot.plot(pen='r')
 
 # Инициализировать популяцию
-genetic = Genetic(population_size=2)
+genetic = Genetic(population_size=4, mutation_coefficient=0.1)
 
-def update_graphs():
-    curves['profit'].setData(genetic.timestamps_history, genetic.profit_history)
-    curves['ask'].setData(genetic.timestamps_history, genetic.ask_history)
+# def update_graphs():
+#     curves['profit'].setData(genetic.timestamps_history, genetic.profit_history)
+#     curves['ask'].setData(genetic.timestamps_history, genetic.ask_history)
 
-# Привязка таймера к обновлению графиков
-timer.timeout.connect(update_graphs)
-timer.start(100)  # Обновление каждые 100 миллисекунд
+# # Привязка таймера к обновлению графиков
+# timer.timeout.connect(update_graphs)
+# timer.start(100)  # Обновление каждые 100 миллисекунд
 
 async def main():
-    await genetic.run(genetic.population[0], inputs_set[700000:,:,:], merged_df[700000:], curves)
+    await genetic.run(inputs_set[730000:,:,:], merged_df[730000:], curves)
 
 if __name__ == "__main__":
     with loop:  # Запуск основного event loop-а
