@@ -11,7 +11,7 @@ setup_logging()
 
 # Параметры
 hyperparameters = {
-    'window_size': 5,
+    'window_size': 50,
     'ema_alfa1': 0.01903373699962808,
     'ema_alfa2': 0.3737415716707692,
     'indicator_buy_edge': 0.9671520166825177,

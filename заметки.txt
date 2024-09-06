@@ -5429,3 +5429,4 @@ fetch("https://api.nasdaq.com/api/quote/USDRUB/info?assetclass=currencies", {
     "developerMessage": null
   }
 }
+https://www.binance.com/ru/trade/BTC_USDT?type=spot
