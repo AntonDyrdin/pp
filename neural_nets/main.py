@@ -8,6 +8,8 @@ if __name__ == "__main__":
   import asyncio
   import qasync
   from sklearn.preprocessing import StandardScaler
+  from agent import Agent
+  import matplotlib.pyplot as plt
 
   # подгрузить датасеты
   # features_count = 0
@@ -63,7 +65,7 @@ if __name__ == "__main__":
   dataset = merged_df.values
 
   # Создание входного набора с использованием окон
-  window_size = 30
+  window_size = 10
   inputs_set = np.lib.stride_tricks.sliding_window_view(dataset, window_shape=(window_size, dataset.shape[1]))
   inputs_set = inputs_set[:, 0, :, :]
 
@@ -87,14 +89,14 @@ if __name__ == "__main__":
   axis4 = pg.graphicsItems.DateAxisItem.DateAxisItem(orientation='bottom')
 
   # Создание графиков
-  indicator_plot = win.addPlot(title="Indicator", axisItems={'bottom': axis2})
-  indicator_plot.showGrid(True, True)
+  currency_plot = win.addPlot(title="Сurrency", axisItems={'bottom': axis2})
+  currency_plot.showGrid(True, True)
   win.nextRow()
   profit_plot = win.addPlot(title="Profit", axisItems={'bottom': axis3})
   profit_plot.showGrid(True, True)
   win.nextRow()
 
-  profit_plot.setXLink(indicator_plot)
+  profit_plot.setXLink(currency_plot)
 
   # Таймер для обновления графиков
   timer = QtCore.QTimer()
@@ -102,21 +104,43 @@ if __name__ == "__main__":
   curves = {}
 
   curves['profit'] = profit_plot.plot([], [], pen=pg.mkPen('r', width=1))
-  curves['ask'] = indicator_plot.plot(pen='r')
+  # curves['ask'] = currency_plot.plot(pen='r')
+  # curves['bid'] = currency_plot.plot(pen='b')
+
+  # curves['buy_scatter'] = pg.ScatterPlotItem(symbol='o', size=10, pen=pg.mkPen(None), brush=pg.mkBrush(0, 255, 0, 255))
+  # curves['sell_scatter'] = pg.ScatterPlotItem(symbol='x', size=10, pen=pg.mkPen(None), brush=pg.mkBrush(255, 50, 50, 255))
+
+  # currency_plot.addItem(curves['buy_scatter'])
+  # currency_plot.addItem( curves['sell_scatter'])
 
   # Инициализировать популяцию
-  genetic = Genetic(population_size=20, mutation_coefficient=0.02, scaler=scaler_USDT_RUB)
+  genetic = Genetic(population_size=20, mutation_coefficient=0.05, scaler=scaler_USDT_RUB, window_size=window_size)
 
-  # def update_graphs():
-  #     curves['profit'].setData(genetic.timestamps_history, genetic.profit_history)
-  #     curves['ask'].setData(genetic.timestamps_history, genetic.ask_history)
+  def update_graphs_training():
+    curves['profit'].setData(genetic.best_individ_profit_history)
+
+  def update_graphs_testing():
+    sell_trades = list(filter(lambda t: t[1] == 'sell', genetic.population[0].trades))
+    buy_trades = list(filter(lambda t: t[1] == 'buy', genetic.population[0].trades))
+    curves['buy_scatter'].setData(list(map(lambda t: t[0], sell_trades)), list(map(lambda t: t[2], sell_trades)))
+    curves['sell_scatter'].setData(list(map(lambda t: t[0], buy_trades)), list(map(lambda t: t[2], buy_trades)))
+    curves['profit'].setData(genetic.timestamps_history, genetic.population[0].profit_history)
+    curves['ask'].setData(genetic.timestamps_history, genetic.ask_history)
+    curves['bid'].setData(genetic.timestamps_history, genetic.bid_history)
 
   # # Привязка таймера к обновлению графиков
-  # timer.timeout.connect(update_graphs)
-  # timer.start(100)  # Обновление каждые 100 миллисекунд
+  timer.timeout.connect(update_graphs_training)
+  timer.start(3000) 
 
   async def main():
-      await genetic.run(inputs_set[600000:710000,:,:], merged_df[600000:710000])
+      fig, ax1 = plt.subplots(figsize=(14, 7))
+      ax2 = ax1.twinx()
+      ax1.plot(merged_df[599900:600000].index, inputs_set[599900-window_size+1:600000-window_size+1,-1,0], label='inputs_set', color='green',linewidth=0.5)
+      ax1.plot(merged_df[599900:600000].index, merged_df[599900:600000]['<CLOSE>_file1'], label='merged_df', color='cyan',linewidth=0.5)
+      ax2.plot(merged_df[599900:600000].index, scaler_USDT_RUB.inverse_transform(inputs_set[599900-window_size+1:600000-window_size+1,-1,0].reshape(-1, 1)), label='inverse_transform', color='red',linewidth=0.5)
+      plt.show()
+      # await genetic.run(inputs_set[599900-window_size+1:600000-window_size+1,:,:], merged_df[595000+window_size:600000+window_size])
+      # await genetic.test_individ(genetic.population[0], inputs_set[710000:,:,:], merged_df[710000:])
 
   if __name__ == "__main__":
       with loop:  # Запуск основного event loop-а
